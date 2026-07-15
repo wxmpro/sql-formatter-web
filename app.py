@@ -1,6 +1,7 @@
-"""SQL 格式化器 Web 后端。"""
+"""SQL 格式化器 Web 后端（本地 Flask 备用模式）。"""
 
 import argparse
+import os
 
 from flask import Flask, jsonify, request
 
@@ -12,7 +13,9 @@ app = Flask(__name__)
 @app.route("/")
 def index():
     """返回前端页面。"""
-    return app.send_static_file("index.html")
+    index_path = os.path.join(app.root_path, "index.html")
+    with open(index_path, "r", encoding="utf-8") as f:
+        return f.read()
 
 
 @app.route("/format", methods=["POST"])
