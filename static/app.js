@@ -64,30 +64,26 @@ async function handleFormat() {
         return;
     }
 
+    if (!isPyodideReady()) {
+        showMessage('Python 环境尚未加载完成，请稍候', 'warning');
+        return;
+    }
+
     hideMessage();
     setLoading(true);
     elOutput.innerHTML = '<code>格式化中…</code>';
 
     try {
-        const response = await fetch('/format', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sql }),
-        });
-
-        const data = await response.json();
-
-        if (!data.success) {
-            renderOutput(null, false);
-            showMessage(data.error || '格式化失败', 'error');
-            return;
-        }
+        const pyodide = getPyodide();
+        pyodide.globals.set('input_sql', sql);
+        const result = pyodide.runPython('format_sql_web(input_sql)');
+        const data = result.toJs({ dict_converter: Object.fromEntries });
 
         const isFallback = data.formatted && data.formatted.trim() === sql.trim();
         renderOutput(data, isFallback);
     } catch (err) {
         renderOutput(null, false);
-        showMessage(`请求失败：${err.message}`, 'error');
+        showMessage(`格式化失败：${err.message}`, 'error');
     } finally {
         setLoading(false);
     }
@@ -166,4 +162,19 @@ function initResizer() {
 }
 
 initResizer();
+
+async function bootPyodide() {
+    try {
+        showMessage('正在加载 Python 运行环境，首次访问需要几秒…', 'warning');
+        await initPyodide();
+        hideMessage();
+        btnFormat.disabled = false;
+        btnFormat.textContent = '格式化';
+    } catch (err) {
+        showMessage(`环境加载失败：${err.message}`, 'error');
+        btnFormat.textContent = '加载失败';
+    }
+}
+
+bootPyodide();
 

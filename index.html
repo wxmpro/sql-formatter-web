@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SQL 格式化器</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="./static/style.css">
 </head>
 <body>
     <header class="app-header">
         <h1>SQL 格式化器</h1>
-        <p class="subtitle">本地运行，原始 SQL 不离开本机</p>
+        <p class="subtitle">在浏览器内完成格式化，原始 SQL 不离开本机</p>
     </header>
 
     <main class="container">
@@ -23,7 +23,7 @@
             </div>
             <textarea id="sql-input" placeholder="在此粘贴原始 SQL..." spellcheck="false"></textarea>
             <div class="panel-footer">
-                <button id="btn-format" type="button" class="btn-primary">格式化</button>
+                <button id="btn-format" type="button" class="btn-primary" disabled>加载中…</button>
             </div>
         </section>
 
@@ -41,6 +41,8 @@
         </section>
     </main>
 
-    <script src="/static/app.js"></script>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
+    <script src="./static/pyodide-loader.js"></script>
+    <script src="./static/app.js"></script>
 </body>
 </html>
