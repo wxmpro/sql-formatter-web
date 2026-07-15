@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL 格式化器</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header class="app-header">
+        <h1>SQL 格式化器</h1>
+        <p class="subtitle">本地运行，原始 SQL 不离开本机</p>
+    </header>
+
+    <main class="container">
+        <section class="panel input-panel">
+            <div class="panel-header">
+                <h2>原始 SQL</h2>
+                <div class="panel-actions">
+                    <button id="btn-example" type="button" class="btn-secondary">加载示例</button>
+                    <button id="btn-clear" type="button" class="btn-secondary">清空</button>
+                </div>
+            </div>
+            <textarea id="sql-input" placeholder="在此粘贴原始 SQL..." spellcheck="false"></textarea>
+            <div class="panel-footer">
+                <button id="btn-format" type="button" class="btn-primary">格式化</button>
+            </div>
+        </section>
+
+        <div class="resizer" id="resizer" aria-hidden="true"></div>
+
+        <section class="panel output-panel">
+            <div class="panel-header">
+                <h2>格式化结果</h2>
+                <button id="btn-copy" type="button" class="btn-secondary" disabled>复制结果</button>
+            </div>
+            <div class="output-wrapper">
+                <pre id="sql-output"><code>格式化后的 SQL 将显示在这里</code></pre>
+            </div>
+            <div id="message" class="message hidden" role="status" aria-live="polite"></div>
+        </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
