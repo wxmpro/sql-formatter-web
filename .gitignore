@@ -10,3 +10,8 @@ __pycache__/
 .idea/
 screenshots/
 .playwright-mcp/
+
+# 本地构建产物与个人规约书，不上传 GitHub
+dist/
+spec/
+humanpending.md

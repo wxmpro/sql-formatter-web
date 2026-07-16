@@ -2,7 +2,7 @@
 
 在浏览器中粘贴原始 SQL，即时获得规范化结果。
 
-本项目是 `10_app_web_dev` workspace 下的第一个 Web 工具项目，为已有的 SQL 格式化核心（`formatter_core/`）提供一个零配置、本地运行的 Web 界面。
+本项目为 SQL 格式化核心（`formatter_core/`）提供一个零配置、本地运行的 Web 界面。
 
 **核心设计原则**：格式化完全在浏览器内通过 Pyodide 完成，原始 SQL 不离开本机。
 
@@ -25,11 +25,7 @@ sql-formatter-web/
 ├── README.md                    # 本文件
 ├── app.py                       # Flask 后端入口（本地运行备用）
 ├── requirements.txt             # Python 依赖
-├── .gitignore                   # 忽略 .venv/、screenshots/ 等
-├── spec/                        # 规约书
-│   ├── pr.spec.md               # 产品需求规格书
-│   ├── userstory.spec.md        # 用户故事规格书
-│   └── sys.spec.md              # 系统架构规格书
+├── .gitignore                   # 忽略本地文件与敏感配置
 ├── formatter_core/              # SQL 格式化核心（Pyodide 前端加载）
 ├── static/                      # 前端静态资源
 │   ├── app.js
@@ -49,17 +45,16 @@ sql-formatter-web/
 
 ### 方式一：Cloudflare Pages（推荐）
 
-1. 仓库已推送至 GitHub。
-2. 在 Cloudflare Pages 创建项目，绑定 GitHub 仓库 `wxmpro/sql-formatter-web`。
-3. 构建设置：
+1. 将本仓库推送至 GitHub，或在 Cloudflare Pages 通过直接上传部署。
+2. 构建设置：
    - **Build command**：（留空，无需构建）
    - **Build output directory**：`/`（项目根目录）
-4. 保存并部署，然后绑定自定义域名 `jinkun.us.ci`。
+3. 保存并部署。
 
 ### 方式二：本地静态服务器
 
 ```bash
-cd /Users/xinmin/openmind/10_app_web_dev/projects/web/tools/sql-formatter-web
+cd <项目目录>
 python -m http.server 8080
 ```
 
@@ -68,7 +63,7 @@ python -m http.server 8080
 ### 方式三：本地 Flask（备用）
 
 ```bash
-cd /Users/xinmin/openmind/10_app_web_dev/projects/web/tools/sql-formatter-web
+cd <项目目录>
 uv venv .venv
 source .venv/bin/activate
 uv pip install -r requirements.txt
@@ -76,6 +71,15 @@ python app.py
 ```
 
 浏览器访问：`http://127.0.0.1:5000`
+
+## 部署（Wrangler 直接上传）
+
+```bash
+cd <项目目录>
+wrangler pages deploy dist --project-name=sql-formatter-web --branch=main
+```
+
+部署凭证已写入 `.env`，该文件已被 Git 忽略。
 
 ## 运行测试
 
@@ -92,8 +96,3 @@ python -m pytest tests/test_app.py -v
 - **前端**：原生 HTML5 + CSS3 + JavaScript
 - **托管**：Cloudflare Pages（静态站点）
 - **测试**：pytest（Flask 备用模式）
-
-## 相关文档
-
-- 主 PRD：`/Users/xinmin/openmind/10_app_web_dev/prds/sql-formatter-web_2026-07-14_v1.0.0.md`
-- 项目规约书：`spec/`
