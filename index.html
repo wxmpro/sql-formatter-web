@@ -5,40 +5,65 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SQL 格式化器</title>
     <link rel="stylesheet" href="./static/style.css">
+    <script>
+        // 尽早应用主题，避免渲染闪烁
+        (function () {
+            const saved = localStorage.getItem('sql-formatter-theme') || 'system';
+            const effective = saved === 'system'
+                ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+                : saved;
+            document.documentElement.setAttribute('data-theme', effective);
+            document.documentElement.style.colorScheme = effective;
+        })();
+    </script>
 </head>
 <body>
     <header class="app-header">
-        <h1>SQL 格式化器</h1>
-        <p class="subtitle">在浏览器内完成格式化，原始 SQL 不离开本机</p>
+        <div class="app-header-left">
+            <h1>SQL 格式化器</h1>
+            <div class="header-tags">
+                <span class="header-tag">本地运行</span>
+                <span class="header-tag">隐私优先</span>
+                <span class="header-tag">开源核心</span>
+            </div>
+        </div>
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="切换主题">
+            <span id="theme-icon">🌓</span>
+            <span id="theme-label">跟随系统</span>
+        </button>
     </header>
 
     <main class="container">
-        <section class="panel input-panel">
-            <div class="panel-header">
-                <h2>原始 SQL</h2>
-                <div class="panel-actions">
-                    <button id="btn-example" type="button" class="btn-secondary">加载示例</button>
-                    <button id="btn-clear" type="button" class="btn-secondary">清空</button>
+        <div class="workspace">
+            <section class="panel input-panel">
+                <div class="panel-header">
+                    <h2>原始 SQL</h2>
+                    <div class="panel-actions">
+                        <button id="btn-example" type="button" class="btn-secondary">加载示例</button>
+                        <button id="btn-clear" type="button" class="btn-secondary">清空</button>
+                    </div>
                 </div>
-            </div>
-            <textarea id="sql-input" placeholder="在此粘贴原始 SQL..." spellcheck="false"></textarea>
-            <div class="panel-footer">
-                <button id="btn-format" type="button" class="btn-primary" disabled>加载中…</button>
-            </div>
-        </section>
+                <textarea id="sql-input" placeholder="在此粘贴原始 SQL..." spellcheck="false"></textarea>
+                <div class="panel-footer">
+                    <button id="btn-format" type="button" class="btn-primary" disabled>加载中…</button>
+                </div>
+            </section>
 
-        <div class="resizer" id="resizer" aria-hidden="true"></div>
+            <div class="panel-divider">
+                <div class="resizer" id="resizer" aria-hidden="true"></div>
+            </div>
 
-        <section class="panel output-panel">
-            <div class="panel-header">
-                <h2>格式化结果</h2>
-                <button id="btn-copy" type="button" class="btn-secondary" disabled>复制结果</button>
-            </div>
-            <div class="output-wrapper">
-                <pre id="sql-output"><code>格式化后的 SQL 将显示在这里</code></pre>
-            </div>
-            <div id="message" class="message hidden" role="status" aria-live="polite"></div>
-        </section>
+            <section class="panel output-panel">
+                <div class="panel-header">
+                    <h2>格式化结果</h2>
+                    <button id="btn-copy" type="button" class="btn-secondary" disabled>复制结果</button>
+                </div>
+                <div class="output-wrapper">
+                    <pre id="sql-output"><code>格式化后的 SQL 将显示在这里</code></pre>
+                </div>
+                <div id="message" class="message hidden" role="status" aria-live="polite"></div>
+            </section>
+        </div>
     </main>
 
     <script src="https://quantil.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>

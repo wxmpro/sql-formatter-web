@@ -10,7 +10,7 @@ const btnExample = document.getElementById('btn-example');
 const elResizer = document.getElementById('resizer');
 const elInputPanel = document.querySelector('.input-panel');
 const elOutputPanel = document.querySelector('.output-panel');
-const elContainer = document.querySelector('.container');
+const elWorkspace = document.querySelector('.workspace');
 
 function showMessage(text, type) {
     elMessage.textContent = text;
@@ -129,7 +129,7 @@ elInput.addEventListener('keydown', (event) => {
 });
 
 function initResizer() {
-    if (!elResizer || !elContainer || !elInputPanel || !elOutputPanel) return;
+    if (!elResizer || !elWorkspace || !elInputPanel || !elOutputPanel) return;
 
     let isResizing = false;
 
@@ -143,10 +143,10 @@ function initResizer() {
     document.addEventListener('mousemove', (event) => {
         if (!isResizing) return;
 
-        const containerRect = elContainer.getBoundingClientRect();
+        const workspaceRect = elWorkspace.getBoundingClientRect();
         const minWidth = 200;
-        const maxWidth = containerRect.width - minWidth - 8;
-        let newWidth = event.clientX - containerRect.left;
+        const maxWidth = workspaceRect.width - minWidth - 1;
+        let newWidth = event.clientX - workspaceRect.left;
         newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
 
         elInputPanel.style.flex = `0 0 ${newWidth}px`;
@@ -163,6 +163,63 @@ function initResizer() {
 
 initResizer();
 
+// Theme handling
+const themeToggle = document.getElementById('theme-toggle');
+const themeIcon = document.getElementById('theme-icon');
+const themeLabel = document.getElementById('theme-label');
+
+const THEME_KEY = 'sql-formatter-theme';
+const THEMES = ['system', 'light', 'dark'];
+
+function getSystemTheme() {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function applyTheme(theme) {
+    let effectiveTheme = theme;
+    if (theme === 'system') {
+        effectiveTheme = getSystemTheme();
+    }
+
+    document.documentElement.setAttribute('data-theme', effectiveTheme);
+    document.documentElement.style.colorScheme = effectiveTheme;
+
+    if (theme === 'system') {
+        themeIcon.textContent = '🌓';
+        themeLabel.textContent = '跟随系统';
+    } else if (theme === 'light') {
+        themeIcon.textContent = '☀️';
+        themeLabel.textContent = '浅色';
+    } else {
+        themeIcon.textContent = '🌙';
+        themeLabel.textContent = '深色';
+    }
+
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function cycleTheme() {
+    const current = localStorage.getItem(THEME_KEY) || 'system';
+    const nextIndex = (THEMES.indexOf(current) + 1) % THEMES.length;
+    applyTheme(THEMES[nextIndex]);
+}
+
+function initTheme() {
+    const saved = localStorage.getItem(THEME_KEY) || 'system';
+    applyTheme(saved);
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        const current = localStorage.getItem(THEME_KEY) || 'system';
+        if (current === 'system') {
+            applyTheme('system');
+        }
+    });
+
+    themeToggle.addEventListener('click', cycleTheme);
+}
+
+initTheme();
+
 async function bootPyodide() {
     try {
         showMessage('正在加载 Python 运行环境，首次访问需要几秒…', 'warning');
@@ -177,4 +234,3 @@ async function bootPyodide() {
 }
 
 bootPyodide();
-
