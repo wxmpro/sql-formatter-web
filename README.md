@@ -45,6 +45,9 @@ sql-formatter-web/
 
 ### 方式一：Cloudflare Pages（推荐）
 
+- 主访问地址：`https://jinkun.us.ci/`
+- 备用访问地址：`https://sql-formatter-web.pages.dev/`
+
 1. 将本仓库推送至 GitHub，或在 Cloudflare Pages 通过直接上传部署。
 2. 构建设置：
    - **Build command**：（留空，无需构建）
