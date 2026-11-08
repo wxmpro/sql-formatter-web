@@ -155,11 +155,6 @@ python tools/regression_check.py
 > 2. 语义等价：格式化前后**代码 token 序列**不变（仅大小写规范化）
 > 3. 无孤儿行：不产生只含单个关键字的碎行
 
-> 回归门禁的三道判定（见 `FORMAT_STYLE_SPEC.md` §七）：
-> 1. 幂等：`format(format(x)) == format(x)`
-> 2. 语义等价：格式化前后标识符/字符串集合不变（仅大小写规范化）
-> 3. 无孤儿行：不产生只含单个关键字的碎行
-
 ## 技术栈
 
 - **格式化核心**：Python 3 + 自定义 lexer/FSM（Pyodide 在浏览器内运行）

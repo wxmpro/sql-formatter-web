@@ -179,7 +179,7 @@ Tier A 补入其中语法类；Tier B 补入其中函数类与类型类。
 | 13 | `ROW_NUMBER() OVER (...)` | 函数名小写、`over` 子句单行 |
 | 14 | `GROUP BY A.ID` | `A.ID` 不被小写 |
 | 15 | 任意输入 | 幂等：`format(format(x)) == format(x)` |
-| 16 | 任意输入 | 语义等价：标识符/字符串集合不变（仅大小写规范化） |
+| 16 | 任意输入 | 语义等价：代码 token **序列**不变（类型+文本+顺序+数量） |
 
 ---
 
@@ -187,7 +187,7 @@ Tier A 补入其中语法类；Tier B 补入其中函数类与类型类。
 
 决策：**web 作主干，搬规则不搬代码**。以下差异为**有意保留**，不向 05 仓库对齐：
 
-| 项 | web | 05 v25 | 分歧理由 |
+| 项 | web | 05 v26 | 分歧理由 |
 |----|-----|--------|----------|
 | JOIN 表名 | `left join DW.T2 B` 同行 | `left join` ⏎ `DW.T2 B` | 同行更紧凑，减少换行（贴合 P1） |
 | 标识符大小写 | 保留 `A.ID` | `group by` 子句会误小写为 `a.id` | web 语义安全 |
@@ -215,7 +215,7 @@ Tier A 补入其中语法类；Tier B 补入其中函数类与类型类。
 
 1. 黄金用例全绿
 2. 幂等：`round2 == round3`
-3. 语义等价：格式化前后标识符 / 字符串字面量集合不变（仅大小写规范化）
+3. 语义等价：格式化前后代码 token **序列**不变（类型+文本+顺序+数量）
 
 ### 实施落地位置
 
@@ -227,7 +227,7 @@ Tier A 补入其中语法类；Tier B 补入其中函数类与类型类。
 | §三 高亮一致性 | `formatter_core/highlighter.py` — 复用 `classify_tokens()`，列名不再被误高亮为关键字 |
 | §四 简单子查询单行 | `formatter_core/fsm_core.py` — `_subquery_scope()`；`FormatState.simple_subq_flags` / `simple_subq_depth` |
 | §五 黄金用例 | `tests/test_golden_cases.py`（16 条） |
-| §七 回归门禁 | `tools/regression_check.py` + `tests/corpus/`（12 个语料）+ `.github/workflows/ci.yml` |
+| §七 回归门禁 | `tools/regression_check.py` + `tests/corpus/`（16 个语料）+ `.github/workflows/ci.yml` |
 
 ### 已知遗留缺陷（超出本规格范围，未修复）
 
