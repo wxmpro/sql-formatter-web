@@ -29,11 +29,20 @@ CASE_TWO_SHORT_ENUM = (
 CASE_TWO_ONE_AND_EACH = (
     "select case when a = 1 and b = 2 then 1 when c = 3 and d = 4 then 2 else 0 end as x from t"
 )
+# 复杂分支: 条件宽度超出 MAX_WIDTH (100) -> 触发拆分
 CASE_TWO_MIXED_COMPLEX = (
-    "select case when a = 1 and b = 2 and c = 3 then 1 when d = 4 then 2 else 0 end as x from t"
+    "select case when "
+    + " and ".join(f"col_{i} = 'val_{i}'" for i in range(10))
+    + " then 1 when d = 4 then 2 else 0 end as x from t"
 )
 CASE_WITH_OR = (
     "select case when a = 1 or b = 2 then 1 when c = 3 then 2 else 0 end as x from t"
+)
+# 含 OR 且超宽 -> 触发拆分
+CASE_WITH_OR_WIDE = (
+    "select case when "
+    + " or ".join(f"col_{i} = 'val_{i}'" for i in range(10))
+    + " then 1 when c = 3 then 2 else 0 end as x from t"
 )
 CASE_WITH_INLINE_COMMENT = (
     "select case when a = 1 -- 注释\n then 1 when b = 2 then 2 else 0 end as x from t"
@@ -81,21 +90,27 @@ def test_case_two_branches_with_one_and_each():
 
 
 def test_case_mixed_complex_only_complex_branch_splits():
-    """用例 6：复杂分支拆分，简单分支不受影响。"""
+    """用例 6：超宽分支拆分，简单分支不受影响（分支之间互相独立）。"""
     out = _lines(CASE_TWO_MIXED_COMPLEX)
-    assert "     when a = 1" in out, out
-    assert "       and b = 2" in out, out
-    assert "       and c = 3" in out, out
-    assert "     then 1" in out, out
-    # 简单分支保持单行
-    assert "     when d = 4 then 2" in out, out
+    # 超宽分支: when 与首段同行, 其余段缩进, then 回到 when 基线
+    assert any(ln.strip().startswith("when col_0 = 'val_0'") for ln in out), out
+    assert any(ln.strip().startswith("and col_1 = 'val_1'") for ln in out), out
+    assert any(ln.strip() == "then 1" for ln in out), out
+    # 简单分支保持单行 —— 一个分支拆不拆, 不影响另一个分支
+    assert any(ln.strip() == "when d = 4 then 2" for ln in out), out
 
 
-def test_case_with_or_is_split():
-    """用例 7：分支含顶层 OR 时拆分。"""
+def test_case_with_or_stays_on_one_line_when_it_fits():
+    """用例 7：含顶层 OR 的短条件放一行 —— 宽度够就不拆。"""
     out = _lines(CASE_WITH_OR)
-    assert any(ln.strip() == "when" or ln.strip().startswith("when a = 1") for ln in out), out
-    assert any(ln.strip() == "or b = 2" for ln in out), out
+    assert any(ln.strip() == "when a = 1 or b = 2 then 1" for ln in out), out
+
+
+def test_case_with_or_splits_when_too_wide():
+    """用例 7b：含顶层 OR 且超宽时拆分。"""
+    out = _lines(CASE_WITH_OR_WIDE)
+    assert any(ln.strip().startswith("when col_0 = 'val_0'") for ln in out), out
+    assert any(ln.strip().startswith("or col_1 = 'val_1'") for ln in out), out
 
 
 def test_case_with_inline_comment_is_force_split():
@@ -173,6 +188,8 @@ _IDEMPOTENCY_SAMPLES = [
     CASE_TWO_SHORT_ENUM,
     CASE_TWO_MIXED_COMPLEX,
     CASE_WITH_OR,
+    CASE_WITH_OR_WIDE,
+    CASE_TWO_MIXED_COMPLEX,
     CASE_WITH_INLINE_COMMENT,
     CASE_WITH_SUBQUERY,
     CASE_TWO_ON_ONE_LINE,

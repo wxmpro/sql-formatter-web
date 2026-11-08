@@ -1,7 +1,7 @@
 # fsm_core.py
 from .constants import (
     TOP_KEYWORDS, CONTROL_KEYWORDS, SINGLE_LINE_KEYWORDS, INDENT_SPACES,
-    IN_LIST_THRESHOLD, MAX_WIDTH, MAX_AND_CHAIN, OR_ALWAYS_SPLIT,
+    IN_LIST_THRESHOLD, MAX_WIDTH,
     COMMENT_INLINE_MAX, Context,
 )
 
@@ -201,12 +201,14 @@ def analyze_case(tokens, case_idx):
     else:
         mode = 'MULTI'
         for b in branches:
-            b['split'] = (
-                b['has_comment']
-                or (OR_ALWAYS_SPLIT and b['or_count'] > 0)
-                or b['and_count'] >= MAX_AND_CHAIN
-                or b['width'] > MAX_WIDTH
-            )
+            # 条件只在两种情况下拆分:
+            #   a. 分支含行内 -- 注释 (H1: '--' 会吞掉其后的一切)
+            #   b. 分支放不下一行 (宽度预算)
+            # 其余情况 (and 链 / or 链, 哪怕有好几个) 只要宽度够, 就整行排布。
+            # 这是"美观"的核心诉求: 判断语句少时放在一行, 而不是无条件拆开。
+            # 旧规则 (OR 一律拆 / AND 段数 >= 2 就拆) 会把宽度完全够得下的条件
+            # 也拆成多行, 产生 "when" 独占一行的孤儿形态。
+            b['split'] = b['has_comment'] or b['width'] > MAX_WIDTH
 
     return {
         'mode': mode,
@@ -235,6 +237,7 @@ class FormatState:
         self.paren_reasons = []           
         self.paren_multiline_flags = []
         self.paren_flush_lparen_flags = []
+        self.paren_atomic_flags = []      # 该括号是否为"原子组"(整体内联, 组内不换行)
         self.simple_subq_flags = []      # 每个括号是否为"字段内简单子查询"
         self.simple_subq_depth = 0       # 当前嵌套的简单子查询层数
         self.case_indent_stack = []
@@ -250,6 +253,21 @@ class FormatState:
         self.in_single_line_mode = False
         self.output_lines = []
         self.current_line = []
+
+    def in_case_condition(self):
+        """当前是否处于 CASE 分支的条件区 (when ... then 之间)。
+
+        与分支是否拆分无关:
+          - 条件区内的逻辑分组括号一律保持原子 (整体内联)
+          - 分支本身不拆分时, 条件区内的 and/or 也不换行 (见 in_case_inline_cond)
+        """
+        return bool(self.case_frames)
+
+    def in_case_inline_cond(self):
+        """CASE 条件区且该分支**不拆分** —— 条件整体作为一行。"""
+        if not self.case_frames:
+            return False
+        return self.case_frames[-1].get('mode') == 'inline'
 
     def get_context(self):
         return self.context_stack[-1] if self.context_stack else Context.GLOBAL
@@ -354,6 +372,12 @@ def format_statement_tokens(tokens):
                 # '--' 行注释会吞掉其后的一切: 其后若还有代码 token (含 ';'),
                 # 注释必须独立成行, 否则会吞掉分号或后续语句。
                 trailing = next_code_token(tokens, i)
+
+                # 注: "注释夹在 then 与其值之间" 时, then 会独占一行。
+                # 这是**有意保留**的形态 —— 若把注释前移到 then 之前, 会改变 token
+                # 的渲染顺序, 破坏幂等性 (第 2 轮的输入顺序与第 1 轮不同)。
+                # 在"注释不改语义 + 幂等"两条约束下, then 独占行是唯一解。
+
                 if len(body) <= COMMENT_INLINE_MAX and trailing is None:
                     # 短备注: 与当前行同行
                     state.append_text(text, prepend_space=True)
@@ -460,7 +484,10 @@ def format_statement_tokens(tokens):
             i += 1
             continue
 
-        if state.is_first_field and text not in {',', ';', ')', 'distinct'}:
+        in_atomic_paren = bool(state.paren_atomic_flags and state.paren_atomic_flags[-1])
+        if (state.is_first_field
+                and not in_atomic_paren
+                and text not in {',', ';', ')', 'distinct', 'exists'}):
             if tok["type"] != 'comment' and text not in {'declare', 'begin', 'end', 'set'}:
                 state.handle_first_field()
 
@@ -592,15 +619,25 @@ def format_statement_tokens(tokens):
                 i += 1
                 continue
 
-            if state.get_context() == Context.LOGICAL and not (state.paren_reasons and state.paren_reasons[-1] == 'over'):
+            # R4: exists 是谓词动词, 与其子查询括号构成一个语义单元。
+            # 与 and/or 不同, exists 不应独占一行 (旧实现 -> "exists" 独占一行)。
+            in_atomic_paren = bool(state.paren_atomic_flags and state.paren_atomic_flags[-1])
+            if (state.get_context() == Context.LOGICAL
+                    and text not in {'exists'}
+                    and not (state.paren_reasons and state.paren_reasons[-1] == 'over')
+                    and not in_atomic_paren
+                    and not state.in_case_inline_cond()):
+                # 原子括号组内、CASE 条件区 (不拆分的分支) 内的 and/or 都不换行:
+                # 条件整体是一个原子, 宽度够就整行排布 (与 split 判定配套)。
                 state.new_line_with_indent(extra_spaces=0)
                 state.append_text(text, prepend_space=False)
                 i += 1
                 continue
 
         if tok["is_keyword"] and text == 'distinct' and state.get_context() == Context.PROJECTION:
-            state.new_line_with_indent(extra_spaces=0)
-            state.append_text(text, prepend_space=False)
+            # R1: select 的修饰符属于 select 的语义单元, 与 select 同行。
+            # 旧实现强制换行 -> "distinct" 独占一行, 违反 P1 (一行 = 一个完整语义单元)。
+            state.append_text(text, prepend_space=True)
             i += 1
             continue
 
@@ -641,7 +678,10 @@ def format_statement_tokens(tokens):
             state.paren_reasons.append(reason)
             
             comma_count = lookahead_comma_count(tokens, i)
-            is_multiline = comma_count >= IN_LIST_THRESHOLD 
+            is_multiline = comma_count >= IN_LIST_THRESHOLD
+            # 原子组内整体内联: IN 列表等不再展开
+            if state.paren_atomic_flags and state.paren_atomic_flags[-1]:
+                is_multiline = False
             
             if prev_tok and prev_tok["text"] == 'over':
                 is_multiline = False
@@ -677,7 +717,9 @@ def format_statement_tokens(tokens):
                 else:
                     should_flush_lparen = True
             elif state.get_context() == Context.LOGICAL and is_logic_group:
-                should_flush_lparen = True
+                # 逻辑分组括号: 默认展开; 但在 CASE 条件区内保持原子 (§二),
+                # 使 "when (A or B)" 同行, 而不是把 when 留空独占一行。
+                should_flush_lparen = not state.in_case_condition()
 
             is_func = prev_tok and prev_tok["type"] in {'word', 'quoted_id'} and prev_tok["text"] not in CONTROL_KEYWORDS
             if should_flush_lparen:
@@ -691,6 +733,10 @@ def format_statement_tokens(tokens):
                 state.context_stack.append(Context.GLOBAL)
 
             state.paren_flush_lparen_flags.append(should_flush_lparen)
+            # 原子组: 整体内联, 组内的 and/or 不换行
+            in_atomic = bool(state.paren_atomic_flags and state.paren_atomic_flags[-1])
+            is_atomic_group = is_logic_group and (state.in_case_condition() or in_atomic)
+            state.paren_atomic_flags.append(is_atomic_group)
 
             if should_flush_lparen:
                 if state.current_top_kw in {'with', 'insert into', 'delete from', 'update', 'union all', 'union'} or (state.current_top_kw and 'join' in state.current_top_kw):
@@ -722,7 +768,9 @@ def format_statement_tokens(tokens):
             if is_simple_subq:
                 state.simple_subq_depth += 1
             
-            if (is_multiline and reason in {'in', 'values'}) or (state.get_context() == Context.LOGICAL and is_logic_group):
+            # 原子组: 不 flush, 内容整体内联在 "when (" 之后
+            if ((is_multiline and reason in {'in', 'values'})
+                    or (state.get_context() == Context.LOGICAL and is_logic_group and not is_atomic_group)):
                 state.flush_line()
                 first_indent = current_env_indent
                 if reason == 'insert into':
@@ -752,6 +800,7 @@ def format_statement_tokens(tokens):
             is_multiline = state.paren_multiline_flags.pop() if state.paren_multiline_flags else False
             target_spaces = state.paren_indent_stack.pop() if state.paren_indent_stack else state.scope_base()
             was_lparen_flushed = state.paren_flush_lparen_flags.pop() if state.paren_flush_lparen_flags else False
+            if state.paren_atomic_flags: state.paren_atomic_flags.pop()
             is_simple_subq = state.simple_subq_flags.pop() if state.simple_subq_flags else False
             if is_simple_subq:
                 state.simple_subq_depth = max(0, state.simple_subq_depth - 1)

@@ -61,18 +61,21 @@ analyze_case(tokens, case_idx) -> layout
 2. 若分支总数 == 1 且该分支自然宽度 ≤ MAX_WIDTH        → D1
 3. 否则进入 MULTI 模式，对每个分支独立判定是否拆分：
    a. 分支含行内 -- 注释                    → split = True   (H1)
-   b. 分支含顶层 OR                          → split = True
-   c. 分支顶层 AND 段数 ≥ MAX_AND_CHAIN      → split = True
-   d. 分支自然宽度 > MAX_WIDTH               → split = True
-   e. 否则                                    → split = False
-```
+   b. 分支自然宽度 > MAX_WIDTH               → split = True
+   c. 否则                                    → split = False
+
+> **规则演进（2026-11-08）**：旧规则还有"含顶层 OR 一律拆 / AND 段数 ≥ 2 就拆"。
+> 这两条会让宽度完全够得下的条件也被拆开，产生 `when` 独占一行的孤儿形态，
+> 与"判断语句少时放在一行"的排版诉求直接冲突。现统一由**宽度预算**决定：
+> **宽度够就整行，超宽才拆**。AND / OR 段数不再单独触发拆分，只在超宽时
+> 作为分段依据（拆成 `when <seg1>` / `and <seg2>` / `or <seg3>`）。
 
 ### 2.2 计数口径（实现必须严格遵守，否则行为会漂移）
 
 | 项 | 定义 |
 |----|------|
-| `or_n` | 谓词**顶层**（不在任何括号内）的 OR 数量。`a and b or c` → `or_n = 1` |
-| `and_n` | 顶层 OR 切分后，各 OR 段内 AND 数量的**最大值**。`a and b or c and d` → `and_n = 1`；`a and b and c` → `and_n = 2` |
+| `or_n` | 谓词**顶层**（不在任何括号内）的 OR 数量。`a and b or c` → `or_n = 1`。**不再单独触发拆分**，仅作超宽时的分段依据 |
+| `and_n` | 顶层 OR 切分后，各 OR 段内 AND 数量的**最大值**。`a and b or c and d` → `and_n = 1`；`a and b and c` → `and_n = 2`。同样仅作分段依据 |
 | `width` | 分支的自然渲染宽度（单空格连接）：`len("when " + cond + " then " + val)` |
 
 ### 2.3 渲染模板
@@ -88,7 +91,7 @@ analyze_case(tokens, case_idx) -> layout
      else <val>
    end as alias
 
-── MULTI + split=True（条件复杂，缩进到下一行）
+── MULTI + split=True（条件超宽，按段展开）
    case
      when <seg1>
        and <seg2>
@@ -97,6 +100,20 @@ analyze_case(tokens, case_idx) -> layout
      else <val>
    end as alias
 ```
+
+> `when` 始终与**第一个条件段同行**（不独占一行）。
+>
+> **原子括号组**：条件以 `(` 开头时，该逻辑分组括号在 CASE 条件区内保持
+> **原子**——不展开、组内 and/or 不换行、组内 IN 列表也不展开，整体内联在
+> `when (` 之后。段与段的分隔只由**顶层** and/or 负责：
+>
+> ```
+> when (t1.split_flag = 'SP' or t1.split = 'SP')
+>   and t2.itemcode in ('10001', '10002', '10003', '10004')
+> then coalesce(t1.charge, 0)
+> ```
+>
+> 非 CASE 场景下的逻辑分组括号仍按常规展开（`where (a = 1 or b = 2)`）。
 
 **缩进基准**：`case` 与所在字段行对齐；`when` / `else` / `end` = `case` 基线 + `INDENT_SPACES`；
 `and` 段 = `when` 基线 + `INDENT_SPACES`；`then <值>` 回到 `when` 基线。
@@ -152,6 +169,8 @@ Tier A 补入其中语法类；Tier B 补入其中函数类与类型类。
 | 窗口函数 `over (...)` | 始终单行 | 已有 ✓ |
 | IN 列表 | ≤ `IN_LIST_THRESHOLD` 元素单行；> 阈值展开，逗号顶格 | 需统一逗号风格 |
 | 字段内简单子查询 `(select ...)` | 保持单行 | **需新增** |
+| `select` 的修饰符 `distinct` | 与 `select` 同行 | **需新增** |
+| 谓词动词 `exists` | 与 `where` 同行（其后子查询括号可另起一行） | **需新增** |
 | 字段内复杂子查询 | 展开，`(` 与字段内容对齐 | 已有 |
 | JOIN 表名 | 与 JOIN 关键字同行 | 已有（**有意与 05 仓库分歧**，见 §六） |
 | DDL/DML 单行（`truncate table x;` / `use x;`） | 保持单行 | 已有 ✓ |
@@ -169,8 +188,8 @@ Tier A 补入其中语法类；Tier B 补入其中函数类与类型类。
 | 3 | 单分支 3 个 AND | D1 整块一行 |
 | 4 | 2 分支、枚举值单字母 | MULTI，`when x = 'A' then 1` 同行 |
 | 5 | 2 分支、每分支 1 个 AND | MULTI，条件不展开 |
-| 6 | 2 分支、某分支 3 个 AND | 该分支两段式拆分，另一分支不受影响 |
-| 7 | 分支含顶层 OR | 拆分 |
+| 6 | 2 分支、某分支条件超宽 | 该分支按段拆分，另一分支不受影响 |
+| 7 | 分支含顶层 OR | 宽度够 → 整行；超宽 → 拆分 |
 | 8 | 分支含行内 `--` 注释 | 强制拆分（H1） |
 | 9 | CASE 内嵌子查询 | 拆分且不丢 `case` 关键字 |
 | 10 | 单行两个独立 CASE | 两个 CASE 独立判定，不互相污染 |
@@ -298,6 +317,9 @@ Tier A 补入其中语法类；Tier B 补入其中函数类与类型类。
 | C-6 lexer 不得改写 token 内容 | 数字正则不得吞小数点；双引号内容整段豁免 |
 | C-7 合并复合词必须保留位置 | 否则回退切片会截断内容 |
 | C-8 任何改动后必须跑全量 3,888 文件 | 单文件测试无法暴露构造级冲突 |
+| C-9 条件拆分只由**宽度**与**行内注释**触发 | AND/OR 段数不再单独触发拆分，否则宽度够的条件也会被拆开 |
+| C-10 不得改变 token 的渲染顺序 | 把注释前移（如移到 `then` 之前）会改变顺序，破坏幂等性；宁可让 `then` 独占一行 |
+| C-11 CASE 条件区内的逻辑分组括号是**原子** | 不展开、组内不换行；段分隔只由顶层 and/or 负责，否则 `when` 会被留空独占一行 |
 
 ### 8.5 回归语料（覆盖上述全部构造）
 
