@@ -1,3 +1,10 @@
+> **本仓库已并入 [`wxmpro/sql_formatter`](https://github.com/wxmpro/sql_formatter)（私有），转为只读归档。**
+>
+> 最新版本、网页与命令行入口、全部排版契约与回归门禁，均在 `sql_formatter` 中。
+> 本仓库不再更新；仅保留历史提交以追溯演进过程。
+
+---
+
 # SQL 格式化器 Web 界面
 
 在浏览器中粘贴原始 SQL，即时获得规范化结果。
