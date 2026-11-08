@@ -60,23 +60,29 @@ def format_sql_file(sql_text):
     for idx, stmt_tokens in enumerate(statement_tokens_list):
         if not stmt_tokens: continue
             
-        # 🚀 修复3: 真正的硬隔离容灾。如果在切分时发现语句静态校验失败，直接从切分段反推文本
-        # 由于静态检查失败，这段语句不会被送入任何转换流程
-        reconstructed_raw = "".join(t["text"] + (" " if t["type"] != "punct" else "") for t in stmt_tokens).strip()
-        
+        # 🚀 修复3: 硬隔离容灾。语句静态校验失败时, 按【原文切片】原样输出。
+        # 旧实现用 token 重建, 会丢掉原始空白与结构, 导致输出括号/case-end 不配对,
+        # 甚至内容缺失。原文切片由 token 的 start/end 位置取得 (lexer 已记录)。
+        def _original_slice(sts):
+            st = sts[0].get('start')
+            en = sts[-1].get('end')
+            if st is not None and en is not None and en > st:
+                return sql_text[st:en].strip()
+            return "".join(t["text"] for t in sts).strip()
+
         if not check_syntax(stmt_tokens):
-            final_output_lines.append(reconstructed_raw)
+            final_output_lines.append(_original_slice(stmt_tokens))
             final_output_lines.append("")
             continue
-            
+
         fsm_lines = format_statement_tokens(stmt_tokens)
         aligned_lines = align_code_blocks(fsm_lines)
         formatted_text = "\n".join(aligned_lines)
-        
+
         post_tokens = tokenize(formatted_text)
         if not check_syntax(post_tokens):
             print("🚨 容灾防御机制生效: 局部语句格式化异常，已强制回退该段语句源码，保护运行逻辑。")
-            final_output_lines.append(reconstructed_raw)
+            final_output_lines.append(_original_slice(stmt_tokens))
         else:
             final_output_lines.append(formatted_text)
             

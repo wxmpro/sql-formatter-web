@@ -17,23 +17,76 @@
 - 响应式布局：宽屏双栏、窄屏上下堆叠
 - 桌面端可拖拽调整左右分栏宽度
 
+## 排版契约
+
+格式化行为由 [`FORMAT_STYLE_SPEC.md`](./FORMAT_STYLE_SPEC.md) 定义，引擎实现以该文档为准。
+核心要点：
+
+| 主题 | 规则 |
+|------|------|
+| CASE WHEN | 三档判定：D1 单分支整块一行 / D2 多分支每分支一行（条件不展开）/ D3 条件复杂时展开并缩进 |
+| 关键字小写 | 三层分层：语法关键字无条件小写；函数名仅在紧跟 `(` 时小写；类型名仅在类型位置小写；引号内与别名原样保留 |
+| 孤儿行 | 禁止产生"只含单个关键字"的碎行 |
+| 行宽预算 | 默认 100 字符 |
+
+示例：
+
+```sql
+-- 单分支：整块一行
+select
+   case when a = 1 and b = 2 and c = 3 then 4 else 0 end as x
+
+-- 多分支：每分支一行，条件不展开
+select
+   case
+     when a.flg = 'A' then '是'
+     when a.flg = 'B' then '否'
+     else '未知'
+   end as flg_desc
+```
+
 ## 目录结构
 
 ```text
 sql-formatter-web/
 ├── index.html                   # 前端入口（静态托管根页面）
 ├── README.md                    # 本文件
+├── FORMAT_STYLE_SPEC.md         # 排版契约（风格规格，引擎行为的唯一依据）
 ├── app.py                       # Flask 后端入口（本地运行备用）
-├── requirements.txt             # Python 依赖
+├── requirements.txt             # 运行时依赖
+├── requirements-dev.txt         # 开发/测试依赖
 ├── .gitignore                   # 忽略本地文件与敏感配置
+├── .github/workflows/ci.yml     # CI：pytest + 回归门禁
 ├── formatter_core/              # SQL 格式化核心（Pyodide 前端加载）
 ├── static/                      # 前端静态资源
 │   ├── app.js
 │   ├── style.css
 │   └── pyodide-loader.js
-└── tests/                       # 后端接口测试（本地 Flask 模式用）
-    └── test_app.py
+├── tests/                       # 测试
+│   ├── test_app.py              # Flask 接口测试
+│   ├── test_golden_cases.py     # 黄金用例（排版契约门禁）
+│   ├── test_verification.py     # 历史 Bug 回归
+│   └── corpus/                  # 回归语料（16 个代表性 SQL）
+└── tools/
+    ├── regression_check.py      # 幂等性 / 语义等价 / 孤儿行 回归门禁
+    └── batch_format.py          # 批量规范化（目录结构保持 + 三道门禁 + 报告）
 ```
+
+## 批量规范化
+
+```bash
+python3 tools/batch_format.py \
+  --src  <源目录> --dst <目标目录> \
+  [--suffix _step1] [--alias "旧层名=新层名"] \
+  [--dry-run] [--report report.json]
+```
+
+- **源目录只读**，绝不写入；输出保持相对目录结构
+- 每个文件过三道门禁：幂等性 / 代码 token 序列等价 / 无孤儿行
+- 源文件本身语法不完整时，按**原文切片**原样透传（安全降级），并在报告中单列
+- `--dry-run` 只分析不写入；`--report` 输出 JSON 明细
+
+> 幂等性契约与全量归因结论见 [`FORMAT_STYLE_SPEC.md`](./FORMAT_STYLE_SPEC.md) §八。
 
 ## 环境要求
 
@@ -88,10 +141,24 @@ wrangler pages deploy dist --project-name=sql-formatter-web --branch=main
 
 ```bash
 source .venv/bin/activate
-python -m pytest tests/test_app.py -v
+pip install -r requirements-dev.txt
+
+# 黄金用例 + 接口测试 + 历史 Bug 回归
+python -m pytest tests/ -v
+
+# 幂等性 / 语义等价 / 孤儿行 回归门禁（对 tests/corpus/ 全量语料）
+python tools/regression_check.py
 ```
 
-> 注意：测试仅覆盖 Flask 备用模式，Pyodide 前端模式通过浏览器验证。
+> 回归门禁的三道判定（见 `FORMAT_STYLE_SPEC.md` §七、§八）：
+> 1. 幂等：`format(format(x)) == format(x)`
+> 2. 语义等价：格式化前后**代码 token 序列**不变（仅大小写规范化）
+> 3. 无孤儿行：不产生只含单个关键字的碎行
+
+> 回归门禁的三道判定（见 `FORMAT_STYLE_SPEC.md` §七）：
+> 1. 幂等：`format(format(x)) == format(x)`
+> 2. 语义等价：格式化前后标识符/字符串集合不变（仅大小写规范化）
+> 3. 无孤儿行：不产生只含单个关键字的碎行
 
 ## 技术栈
 

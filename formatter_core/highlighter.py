@@ -3,13 +3,16 @@
 
 import html
 
-from .lexer import SQL_LEXER_REGEX
-from .constants import ALL_KEYWORDS
+from .lexer import SQL_LEXER_REGEX, classify_tokens
 
 
-def _token_class(kind, text):
-    """根据 lexer 的 token 类型返回 CSS 类名。"""
-    if kind == 'word' and text.lower() in ALL_KEYWORDS:
+def _token_class(kind, text, kw_class):
+    """根据 token 类型与关键字分层结果返回 CSS 类名。
+
+    kw_class 非空才视为关键字 —— 与实际小写行为严格一致,
+    避免把名为 count/length/date 的列名错误高亮成关键字。
+    """
+    if kw_class:
         return 'sql-keyword'
     if kind == 'string':
         return 'sql-string'
@@ -28,11 +31,32 @@ def highlight_sql(sql_text):
     if not sql_text:
         return ''
 
+    matches = list(SQL_LEXER_REGEX.finditer(sql_text))
+
+    # 先建立非空白 token 序列并做关键字分层判定
+    raw = []
+    for match in matches:
+        if match.lastgroup == 'space':
+            continue
+        raw.append({
+            'type': match.lastgroup,
+            'text': match.group(),
+            'start': match.start(),
+            'end': match.end(),
+        })
+    classify_tokens(raw)
+    class_by_pos = {(t['start'], t['end']): t.get('kw_class') for t in raw}
+
     parts = []
-    for match in SQL_LEXER_REGEX.finditer(sql_text):
+    for match in matches:
         kind = match.lastgroup
         text = match.group()
-        cls = _token_class(kind, text)
+        if kind == 'space':
+            parts.append(html.escape(text, quote=False))
+            continue
+
+        kw_class = class_by_pos.get((match.start(), match.end()))
+        cls = _token_class(kind, text, kw_class)
         escaped = html.escape(text, quote=False)
 
         if cls:
